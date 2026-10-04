@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-endpointguard}
+      POSTGRES_USER: ${DB_USER:-endpointguard}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD before starting the stack}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./endpointguard
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      TZ: UTC
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-endpointguard}
+      DB_USER: ${DB_USER:-endpointguard}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD before starting the stack}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET before starting the stack}
+      GITHUB_PAT: ${GITHUB_PAT:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?Set GITHUB_WEBHOOK_SECRET before starting the stack}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      DEMO_API_URL: http://demo-api:8081
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      demo-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  demo-api:
+    build:
+      context: ./demo-api
+      dockerfile: Dockerfile
+    ports:
+      - "${DEMO_API_PORT:-8081}:8081"
+    environment:
+      TZ: UTC
+      SERVER_PORT: 8081
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  traffic-generator:
+    build:
+      context: ./traffic-generator
+      dockerfile: Dockerfile
+    environment:
+      DEMO_API_URL: http://demo-api:8081
+      REQUESTS_PER_SECOND: 5
+    depends_on:
+      demo-api:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
