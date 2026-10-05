@@ -11,7 +11,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
-@RestController
+// @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
 
