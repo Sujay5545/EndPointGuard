@@ -43,3 +43,9 @@ Thumbs.db
 .tsupgrader/
 test-results/
 cp.txt
+
+# =========================
+# Local project progress
+# =========================
+ENDPOINTGUARD_PROGRESSANDREMAINING.md
+UIENHANCEMENT_PROGRESS.md

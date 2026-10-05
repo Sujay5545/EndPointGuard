@@ -68,7 +68,7 @@ export const api = {
     method: 'PUT', body: JSON.stringify({ githubRepoFullName, webhookSecretRef }),
   }),
   deleteRepository: (projectId, repositoryId) => request(`/api/projects/${projectId}/repositories/${repositoryId}`, { method: 'DELETE' }),
-  pullRequests: (projectId, page = 0, size = 25, status = '') => request(`/api/projects/${projectId}/pull-requests?page=${page}&size=${size}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+  pullRequests: (projectId, page = 0, size = 20, status = '') => request(`/api/projects/${projectId}/pull-requests?page=${page}&size=${size}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
   pullRequest: (projectId, pullRequestId) => request(`/api/projects/${projectId}/pull-requests/${pullRequestId}`),
   monitoring: (projectId) => request(`/api/projects/${projectId}/monitoring`),
   endpoints: (repositoryId) => request(`/api/repositories/${repositoryId}/endpoints`),

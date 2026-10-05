@@ -23,6 +23,64 @@ describe('sign-in flow', () => {
     sessionStorage.clear()
     vi.restoreAllMocks()
   })
+
+  it('shows a user-friendly message for incorrect passwords', async () => {
+    vi.spyOn(api, 'login').mockRejectedValue(new Error('Your session has expired. Sign in again to continue.'))
+
+    render(<MemoryRouter initialEntries={['/login']}><App /></MemoryRouter>)
+    fireEvent.change(screen.getByLabelText('Work email'), { target: { value: 'phase8@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Incorrect password.'))
+    cleanup()
+    sessionStorage.clear()
+    vi.restoreAllMocks()
+  })
+})
+
+describe('overview traffic timeline', () => {
+  it('plots actual minute request counts and reloads for each selected range', async () => {
+    const payload = btoa(JSON.stringify({ sub: 'reviewer@example.com' }))
+    setToken(`header.${payload}.signature`)
+    const latest = new Date()
+    latest.setUTCSeconds(0, 0)
+    const earlier = new Date(latest.getTime() - 2 * 60 * 1000)
+
+    vi.spyOn(api, 'projects').mockResolvedValue([{ id: 1, name: 'EndpointGuard Core' }])
+    vi.spyOn(api, 'repositories').mockResolvedValue([{ id: 10, projectId: 1, githubRepoFullName: 'acme/core-api' }])
+    vi.spyOn(api, 'endpoints').mockResolvedValue([{ id: 7, projectId: 1, repositoryId: 10, method: 'GET', pathPattern: '/api/payments', criticality: 'HIGH' }])
+    vi.spyOn(api, 'endpointMetrics').mockResolvedValue([
+      { bucketStart: earlier.toISOString().slice(0, 19), requestCount: 21 },
+      { bucketStart: latest.toISOString().slice(0, 19), requestCount: 50 },
+    ])
+
+    render(<MemoryRouter><App /></MemoryRouter>)
+    const rangeControls = await screen.findByRole('group', { name: 'Overview traffic time range' })
+    await waitFor(() => expect(document.querySelectorAll('.traffic-panel svg circle')).toHaveLength(1441))
+
+    const pointTitles = [...document.querySelectorAll('.traffic-panel svg circle title')].map(title => title.textContent)
+    expect(pointTitles.some(title => title.endsWith(': 21'))).toBe(true)
+    expect(pointTitles.some(title => title.endsWith(': 50'))).toBe(true)
+    expect(pointTitles.some(title => title.endsWith(': 0'))).toBe(true)
+
+    fireEvent.click(rangeControls.querySelector('button:nth-child(1)'))
+    await waitFor(() => expect(rangeControls.querySelector('button:nth-child(1)')).toHaveClass('segment-active'))
+    await waitFor(() => expect(api.endpointMetrics).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(document.querySelectorAll('.traffic-panel svg circle')).toHaveLength(61))
+    fireEvent.click(rangeControls.querySelector('button:nth-child(2)'))
+    await waitFor(() => expect(rangeControls.querySelector('button:nth-child(2)')).toHaveClass('segment-active'))
+    await waitFor(() => expect(api.endpointMetrics).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(document.querySelectorAll('.traffic-panel svg circle')).toHaveLength(361))
+    fireEvent.click(rangeControls.querySelector('button:nth-child(3)'))
+    await waitFor(() => expect(rangeControls.querySelector('button:nth-child(3)')).toHaveClass('segment-active'))
+    await waitFor(() => expect(api.endpointMetrics).toHaveBeenCalledTimes(4))
+    await waitFor(() => expect(document.querySelectorAll('.traffic-panel svg circle')).toHaveLength(1441))
+
+    cleanup()
+    sessionStorage.clear()
+    vi.restoreAllMocks()
+  })
 })
 
 describe('pull request detail structured LLM review UI', () => {
@@ -151,6 +209,7 @@ describe('pull request detail structured LLM review UI', () => {
     expect(screen.getByText('AUTHORITATIVE GATE')).toBeInTheDocument()
     expect(screen.getByText('ADVISORY CONTEXT')).toBeInTheDocument()
     expect(screen.getByText(/0.25 score/i)).toBeInTheDocument()
+    expect(screen.getByText('Scored 0.25')).toBeInTheDocument()
 
     // 3. AI Risk & Confidence
     expect(screen.getByText('98%')).toBeInTheDocument() // Confidence

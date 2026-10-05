@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3,
@@ -26,16 +26,64 @@ function RiskBadge({ tier }) {
   return <span className={`risk-badge risk-${normalized}`}><span className="risk-dot" />{tier || 'UNASSESSED'}</span>
 }
 
+function passwordRequirements(password) {
+  return [
+    { label: '8+ characters', valid: password.length >= 8 },
+    { label: '1 uppercase letter', valid: /[A-Z]/.test(password) },
+    { label: '1 lowercase letter', valid: /[a-z]/.test(password) },
+    { label: '1 number', valid: /\d/.test(password) },
+    { label: '1 special character', valid: /[^A-Za-z0-9]/.test(password) },
+  ]
+}
+
+function isStrongPassword(password) {
+  return password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password)
+}
+
+function formatAuthError(mode, message) {
+  const cleaned = (message || '').trim()
+  const normalized = cleaned.toLowerCase()
+
+  if (mode === 'login') {
+    if (normalized.includes('session has expired') || normalized.includes('incorrect password') || normalized.includes('invalid password') || normalized.includes('bad credentials') || normalized.includes('wrong password')) {
+      return 'Incorrect password.'
+    }
+    if (normalized.includes('email') && (normalized.includes('not found') || normalized.includes('unknown') || normalized.includes('does not exist'))) {
+      return 'We could not find an account for that email.'
+    }
+    return 'Unable to sign in. Please check your email and password.'
+  }
+
+  if (normalized.includes('password')) {
+    if (normalized.includes('at least 8') || normalized.includes('uppercase') || normalized.includes('lowercase') || normalized.includes('number') || normalized.includes('special')) {
+      return 'Password must be at least 8 characters and include an uppercase letter, lowercase letter, number, and special character.'
+    }
+    if (normalized.includes('weak') || normalized.includes('invalid')) {
+      return 'Choose a stronger password with at least 8 characters and a mix of letters, numbers, and symbols.'
+    }
+  }
+
+  return 'Unable to create your account right now. Please try again.'
+}
+
 function Login({ onLogin }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const requirements = passwordRequirements(password)
+  const passwordReady = isStrongPassword(password)
 
   async function submit(event) {
     event.preventDefault()
     setError('')
+
+    if (mode === 'register' && !passwordReady) {
+      setError('Password must be at least 8 characters and include an uppercase letter, lowercase letter, number, and special character.')
+      return
+    }
+
     setBusy(true)
     try {
       const result = mode === 'login'
@@ -44,68 +92,79 @@ function Login({ onLogin }) {
       setToken(result.token)
       onLogin()
     } catch (e) {
-      setError(e.message)
+      setError(formatAuthError(mode, e.message))
     } finally {
       setBusy(false)
     }
   }
 
   return <main className="login-shell">
-    <section className="login-brand"><div className="brand-lockup"><span className="brand-symbol"><Shield size={17} /></span><span>endpoint<span className="brand-accent">guard</span></span></div>
-      <div className="login-intro"><p className="eyebrow">TRAFFIC-AWARE CODE REVIEW</p><h1>Ship changes<br />with production<br /><em>context.</em></h1><p>Connect code changes to the endpoints, traffic, and reliability they can affect.</p></div>
+    <section className="login-brand"><div className="brand-lockup"><span className="brand-symbol"><Shield size={17} /></span><span>Endpoint<span className="brand-accent">Guard</span></span></div>
+      <div className="login-intro"><p className="eyebrow">TRAFFIC-AWARE CODE REVIEW</p><h1>Keep your code,<br />endpoints, and<br /><em>traffic aligned.</em></h1><p>Give your team the context they need to review changes with confidence.</p></div>
       <div className="login-flow"><span><GitPullRequest size={15} /> Pull request</span><ArrowRight size={15} /><span><Activity size={15} /> Live signals</span><ArrowRight size={15} /><span><ShieldCheck size={15} /> Risk context</span></div>
-      <div className="login-footnote"><span className="status-dot" /> API-connected risk intelligence</div>
+      <div className="login-footnote"><span className="status-dot" /> Secure workspace access</div>
     </section>
     <section className="login-form-wrap"><form className="login-form" onSubmit={submit}>
       <div className="form-heading"><span className="eyebrow">SECURE WORKSPACE</span><h2>{mode === 'login' ? 'Sign in' : 'Create account'}</h2><p>{mode === 'login' ? 'Use your EndpointGuard account credentials.' : 'Create an account to start configuring your workspace.'}</p></div>
       {error && <div className="inline-error" role="alert">{error}</div>}
       <label htmlFor="email">Work email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
-      <label htmlFor="password">Password</label><input id="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'login' ? undefined : 8} required value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'login' ? 'Enter your password' : 'At least 8 characters'} />
-      <button className="button button-primary login-submit" disabled={busy}>{busy ? <span className="spinner" /> : null}{busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}<ArrowRight size={16} /></button>
-      <p className="auth-switch">{mode === 'login' ? 'New to EndpointGuard?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
-      <p className="login-security"><ShieldCheck size={14} /> Your session is secured with JWT authentication.</p>
+      <label htmlFor="password">Password</label><input id="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'login' ? 'Enter your password' : 'Create a strong password'} />
+      {mode === 'register' && (
+        <div className="password-requirements" aria-live="polite">
+          <span>Password requirements</span>
+          <ul>
+            {requirements.map((rule) => <li key={rule.label} className={rule.valid ? 'is-valid' : ''}>{rule.label}</li>)}
+          </ul>
+        </div>
+      )}
+      <button className="button button-primary login-submit" disabled={busy || (mode === 'register' && password && !passwordReady)}>{busy ? <span className="spinner" /> : null}{busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}<ArrowRight size={16} /></button>
+      <p className="auth-switch">{mode === 'login' ? 'New to EndpointGuard?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setPassword('') }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
+      <p className="login-security"><ShieldCheck size={14} /> Your account session is securely protected.</p>
     </form></section>
   </main>
 }
 
 function AppShell({ user, onLogout, projects, activeProject, setActiveProject, endpointCount, apiStatus, children }) {
   const [mobileMenu, setMobileMenu] = useState(false)
+  const workspaceSelectRef = useRef(null)
   const location = useLocation()
+  const displayUser = formatDisplayName(user) || 'Signed in'
   const title = location.pathname.startsWith('/endpoints/') ? 'Endpoint detail'
     : location.pathname === '/endpoints' ? 'Endpoints'
     : location.pathname === '/projects' ? 'Projects & repositories'
     : location.pathname === '/monitoring' ? 'Post-merge monitoring'
     : location.pathname === '/audit-logs' ? 'Audit logs'
-    : location.pathname === '/profile' ? 'Profile & security'
+    : location.pathname === '/profile' ? 'Profile'
     : location.pathname === '/pull-requests' ? 'Pull requests'
     : location.pathname.startsWith('/pull-requests/') ? 'Pull request detail' : 'Overview'
   const navItems = [
     { to: '/', label: 'Overview', icon: BarChart3, end: true },
-    { to: '/projects', label: 'Projects', icon: FolderGit2 },
+    { to: '/projects', label: 'Projects', icon: FolderGit2, count: projects.length },
     { to: '/pull-requests', label: 'Pull requests', icon: GitPullRequest },
-    { to: '/endpoints', label: 'Endpoints', icon: Code2 },
+    { to: '/endpoints', label: 'Endpoints', icon: Code2, count: endpointCount },
     { to: '/monitoring', label: 'Monitoring', icon: Activity },
     { to: '/audit-logs', label: 'Audit logs', icon: ClipboardList },
   ]
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
-      <Link to="/" className="brand-lockup" onClick={() => setMobileMenu(false)}><span className="brand-symbol"><Shield size={16} /></span><span>endpoint<span className="brand-accent">guard</span></span></Link>
-      <label className="workspace-select"><span className="workspace-avatar">{activeProject?.name?.slice(0, 1)?.toUpperCase() || 'E'}</span><span className="workspace-copy"><small>WORKSPACE</small><select className="workspace-picker" value={activeProject?.id || ''} aria-label="Select project" onChange={event => { const project = projects.find(item => String(item.id) === event.target.value); if (project) setActiveProject(project) }}><option value="" disabled>{projects.length ? 'Select a project' : 'No projects yet'}</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></span><ChevronDown size={14} aria-hidden="true" /></label>
+      <Link to="/" className="brand-lockup" onClick={() => setMobileMenu(false)}><span className="brand-symbol"><Shield size={16} /></span><span>Endpoint<span className="brand-accent">Guard</span></span></Link>
+      <label className="workspace-select" onClick={() => workspaceSelectRef.current?.focus()}><span className="workspace-avatar">{activeProject?.name?.slice(0, 1)?.toUpperCase() || 'E'}</span><span className="workspace-copy"><small>WORKSPACE</small><select ref={workspaceSelectRef} className="workspace-picker" value={activeProject?.id || ''} aria-label="Select project" onChange={event => { const project = projects.find(item => String(item.id) === event.target.value); if (project) setActiveProject(project) }}><option value="" disabled>{projects.length ? 'Select a project' : 'No projects yet'}</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></span><ChevronDown size={14} aria-hidden="true" /></label>
       <span className="nav-caption">WORKSPACE</span>
-      <nav className="primary-nav" aria-label="Main navigation">{navItems.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} onClick={() => setMobileMenu(false)} className={({ isActive }) => `nav-link ${isActive ? 'nav-active' : ''}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{label === 'Endpoints' && <span className="nav-count">{endpointCount}</span>}</NavLink>)}</nav>
+      <nav className="primary-nav" aria-label="Main navigation">{navItems.map(({ to, label, icon: Icon, end, count }) => <NavLink key={to} to={to} end={end} onClick={() => setMobileMenu(false)} className={({ isActive }) => `nav-link ${isActive ? 'nav-active' : ''} ${count != null ? 'has-count' : ''}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{count != null && <span className="nav-count">{count}</span>}</NavLink>)}</nav>
       <div className="sidebar-system"><span className="nav-caption">SYSTEM STATUS</span><div className="system-line"><span className={`status-dot status-${apiStatus}`} /><span>{apiStatus === 'online' ? 'API connected' : apiStatus === 'checking' ? 'Checking API' : 'API unavailable'}</span><span className="system-live">{apiStatus === 'online' ? 'LIVE' : apiStatus === 'checking' ? 'CHECK' : 'OFFLINE'}</span></div><p>Traffic snapshots update every 60 seconds.</p></div>
-      <div className="sidebar-bottom"><a className="help-link" href="http://localhost:8080/swagger-ui/index.html" target="_blank" rel="noreferrer"><CircleHelp size={16} /> API reference <ExternalLink size={12} /></a><div className="user-menu"><span className="user-avatar">{user?.slice(0, 1).toUpperCase() || 'U'}</span><div className="user-copy"><strong>{user || 'Signed in'}</strong><small>Workspace member</small></div><Link className="icon-button" to="/profile" aria-label="Profile and security" title="Profile and security"><UserRound size={15} /></Link><button className="icon-button logout-button" onClick={onLogout} aria-label="Sign out" title="Sign out"><LogOut size={16} /></button></div></div>
+      <div className="sidebar-bottom"><div className="user-menu"><Link className="user-anchor" to="/profile" aria-label="Open profile and security" title="Profile and security"><span className="user-avatar">{displayUser.slice(0, 1).toUpperCase() || 'U'}</span><div className="user-copy"><strong>{displayUser}</strong><small>Workspace access</small></div></Link><Link className="icon-button" to="/profile" aria-label="Profile and security" title="Profile and security"><UserRound size={15} /></Link><button className="icon-button logout-button" onClick={onLogout} aria-label="Sign out" title="Sign out"><LogOut size={16} /></button></div></div>
     </aside>
     {mobileMenu && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileMenu(false)} />}
-    <div className="main-frame"><header className="topbar"><button className="icon-button mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle navigation"><Menu size={19} /></button><div className="breadcrumbs"><span>EndpointGuard</span><span className="crumb-slash">/</span><strong>{title}</strong></div><div className="topbar-right"><span className="api-pill"><span className={`status-dot status-${apiStatus}`} />{apiStatus === 'online' ? 'API operational' : apiStatus === 'checking' ? 'Checking API' : 'API unavailable'}</span><div className="topbar-user">{user?.slice(0, 1).toUpperCase()}</div></div></header><main className="main-content">{children}</main></div>
+    <div className="main-frame"><header className="topbar"><button className="icon-button mobile-menu-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle navigation"><Menu size={19} /></button><div className="breadcrumbs"><span>EndpointGuard</span><span className="crumb-slash">/</span><strong>{title}</strong></div><div className="topbar-right"><Link className="topbar-profile" to="/profile" aria-label="Open profile and security" title="Profile and security"><span className="topbar-user">{displayUser.slice(0, 1).toUpperCase()}</span></Link></div></header><main className="main-content">{children}</main></div>
   </div>
 }
 
-function Dashboard({ projects, repositories, endpoints, refresh, loading, error }) {
+function Dashboard({ projects, repositories, endpoints, refresh, loading, error, apiStatus = 'checking' }) {
   const [search, setSearch] = useState('')
   const [rollup, setRollup] = useState([])
   const [metricsLoading, setMetricsLoading] = useState(false)
   const [metricsError, setMetricsError] = useState('')
+  const [range, setRange] = useState(24)
 
   useEffect(() => {
     let cancelled = false
@@ -114,14 +173,14 @@ function Dashboard({ projects, repositories, endpoints, refresh, loading, error 
     setMetricsError('')
     Promise.all(endpoints.map(async endpoint => {
       try {
-        const metrics = await api.endpointMetrics(endpoint.id, localDateHoursAgo(24), localDateNow())
+        const metrics = await api.endpointMetrics(endpoint.id, localDateHoursAgo(range), localDateNow())
         return { endpoint, metrics: Array.isArray(metrics) ? metrics : [] }
       } catch (e) {
         throw e
       }
     })).then(rows => { if (!cancelled) setRollup(rows) }).catch(e => { if (!cancelled) setMetricsError(e.message) }).finally(() => { if (!cancelled) setMetricsLoading(false) })
     return () => { cancelled = true }
-  }, [endpoints])
+  }, [endpoints, range])
 
   const filteredEndpoints = useMemo(() => endpoints.filter(endpoint => `${endpoint.method} ${endpoint.pathPattern} ${endpoint.criticality}`.toLowerCase().includes(search.toLowerCase())), [endpoints, search])
   const requestTotal = rollup.flatMap(row => row.metrics).reduce((sum, metric) => sum + (metric.requestCount || 0), 0)
@@ -129,16 +188,25 @@ function Dashboard({ projects, repositories, endpoints, refresh, loading, error 
   const trendData = useMemo(() => {
     const buckets = new Map()
     rollup.flatMap(row => row.metrics).forEach(metric => {
-      const bucketStart = metric.bucketStart || '—'
+      if (!metric.bucketStart) return
+      const bucketStart = metric.bucketStart.slice(0, 16)
       buckets.set(bucketStart, (buckets.get(bucketStart) || 0) + (metric.requestCount || 0))
     })
-    return [...buckets.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(-12).map(([bucketStart, requests]) => ({ time: formatTimeInIst(bucketStart), requests }))
-  }, [rollup])
+    const end = new Date()
+    end.setUTCSeconds(0, 0)
+    const start = new Date(end.getTime() - range * 60 * 60 * 1000)
+    const timeline = []
+    for (let cursor = new Date(start); cursor <= end; cursor.setUTCMinutes(cursor.getUTCMinutes() + 1)) {
+      const bucketStart = cursor.toISOString().slice(0, 16)
+      timeline.push({ time: formatTimeInIst(`${bucketStart}:00Z`), requests: buckets.get(bucketStart) || 0 })
+    }
+    return timeline
+  }, [rollup, range])
 
   return <>
     <PageHeading eyebrow="ENGINEERING OVERVIEW" title="Production risk overview" subtitle="A live view of registered API surfaces and their recent traffic signals." action={<button className="button button-secondary" onClick={refresh}><RefreshCw size={14} /> Refresh data</button>} />
     {error && <ErrorState message={error} onRetry={refresh} />}
-    <div className="scope-line"><span className="scope-icon"><FolderGit2 size={15} /></span><span>{projects.length} projects</span><span className="scope-sep">/</span><span>{repositories.length} linked repositories</span><span className="scope-sep">/</span><span>{endpoints.length} registered endpoints</span><span className="scope-right"><Clock3 size={13} /> Rolling 24 hours</span></div>
+    <div className="scope-line"><span className="scope-icon"><FolderGit2 size={15} /></span><span>{projects.length} projects</span><span className="scope-sep">/</span><span>{repositories.length} linked repositories</span><span className="scope-sep">/</span><span>{endpoints.length} registered endpoints</span><span className="scope-right"><Clock3 size={13} /> Rolling {range} hours<span className="info-tip" tabIndex="0" aria-label="Traffic overview" data-tip="Traffic reflects observed requests across the current inventory and does not change route criticality."><CircleHelp size={12} /></span></span></div>
     <section className="metric-strip" aria-label="Engineering summary">
       <MetricTile label="Registered endpoints" value={loading ? '—' : endpoints.length} note="Across linked repositories" icon={Code2} />
       <MetricTile label="Requests observed" value={metricsLoading ? '…' : formatNumber(requestTotal)} note="Persisted metric buckets · 24h" icon={Activity} />
@@ -147,7 +215,7 @@ function Dashboard({ projects, repositories, endpoints, refresh, loading, error 
     </section>
     {metricsError && <div className="subtle-warning"><ShieldAlert size={14} /> Traffic metrics could not be loaded: {metricsError}<button className="text-button" onClick={refresh}>Retry metrics</button></div>}
     <div className="dashboard-grid">
-      <section className="panel traffic-panel"><div className="panel-heading"><div><span className="eyebrow">OBSERVABILITY</span><h2>Traffic volume</h2></div><span className="chart-legend"><i /> Requests</span></div>
+      <section className="panel traffic-panel"><div className="panel-heading"><div><span className="eyebrow">OBSERVABILITY</span><h2>Traffic volume</h2></div><div className="segment-control range-control" role="group" aria-label="Overview traffic time range">{[1, 6, 24].map(hours => <button className={range === hours ? 'segment-active' : ''} key={hours} onClick={() => setRange(hours)}>{hours}H</button>)}</div><span className="chart-legend"><i /> Requests</span></div>
         {metricsLoading ? <LoadingRows count={3} /> : trendData.length ? <div className="chart-wrap"><TrendChart data={trendData} dataKey="requests" color="#50c9ae" label="Requests per metric bucket" /></div> : <EmptyState title="No traffic snapshots yet" detail="Metrics appear after an endpoint is registered and the poller has collected a matching traffic bucket." action={<Link className="text-link" to="/endpoints">View endpoint catalog <ArrowRight size={14} /></Link>} />}
         <div className="chart-footer"><span>Source: stored endpoint metrics</span><span>Requests per bucket</span></div>
       </section>
@@ -158,7 +226,6 @@ function Dashboard({ projects, repositories, endpoints, refresh, loading, error 
     <section className="panel endpoint-preview"><div className="panel-heading endpoint-table-heading"><div><span className="eyebrow">INVENTORY</span><h2>Endpoint catalog <span className="count-bubble">{endpoints.length}</span></h2></div><div className="table-actions"><label className="search-box"><Search size={14} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter endpoints" aria-label="Filter endpoints" /></label><Link className="button button-secondary button-small" to="/endpoints">View all <ArrowRight size={14} /></Link></div></div>
       {loading ? <LoadingRows /> : endpoints.length ? <div className="table-scroll"><table><thead><tr><th>Endpoint</th><th>Criticality</th><th>Source mapping</th><th>Project</th><th aria-label="Actions" /></tr></thead><tbody>{filteredEndpoints.slice(0, 6).map(endpoint => <tr key={endpoint.id}><td><Link className="endpoint-name" to={`/endpoints/${endpoint.id}`}><span className={`method method-${endpoint.method.toLowerCase()}`}>{endpoint.method}</span><code>{endpoint.pathPattern}</code></Link></td><td><CriticalityPill value={endpoint.criticality} /></td><td className="muted-cell">{endpoint.sourcePatterns?.[0] || 'No source pattern'}{endpoint.sourcePatterns?.length > 1 && <span className="more-count"> +{endpoint.sourcePatterns.length - 1}</span>}</td><td className="muted-cell">{projects.find(p => p.id === endpoint.projectId)?.name || '—'}</td><td><Link to={`/endpoints/${endpoint.id}`} className="row-arrow" aria-label={`Open ${endpoint.pathPattern}`}><ArrowRight size={15} /></Link></td></tr>)}</tbody></table>{!filteredEndpoints.length && <p className="table-empty">No endpoints match “{search}”.</p>}</div> : <EmptyState title="Your API surface starts here" detail="Create a project, link its GitHub repository, then register endpoint paths and source mappings." action={<Link className="button button-primary button-small" to="/projects"><Plus size={14} /> Add a project</Link>} />}
     </section>
-    <section className="capability-note"><div className="capability-icon"><GitPullRequest size={16} /></div><div><strong>PR ingestion is configured; PR read views are not exposed yet.</strong><p>The backend accepts GitHub webhook events and maps changed files to endpoints. It currently has no Pull Request listing, risk history, monitoring query, risk-rules, or audit-log read endpoints, so those views are intentionally not populated with sample data.</p></div></section>
   </>
 }
 
@@ -225,12 +292,13 @@ function ProjectsPage({ projects, repositories, refresh, loading, error, activeP
   }
 
   return <>
-    <PageHeading eyebrow="WORKSPACE CONFIGURATION" title="Projects & repositories" subtitle="Connect the codebases whose API surfaces and traffic you want to understand." />
+    <PageHeading eyebrow="WORKSPACE CONFIGURATION" title="Projects & repositories" subtitle="Organize the codebases that feed endpoint inventory, risk analysis, and pull request context." />
     {error && <ErrorState message={error} onRetry={refresh} />}{notice && <div className="inline-success"><Check size={15} />{notice}<button className="icon-button" onClick={() => setNotice('')} aria-label="Dismiss"><X size={14} /></button></div>}{formError && <div className="inline-error" role="alert">{formError}</div>}
-    <div className="setup-grid"><section className="panel setup-panel"><div className="panel-heading"><div><span className="eyebrow">STEP 01</span><h2>Create a project</h2></div><span className="setup-step"><FolderGit2 size={17} /></span></div><p className="panel-description">A project groups the repositories and API endpoints that belong to one service or product area.</p><form onSubmit={createProject} className="stack-form"><label htmlFor="project-name">Project name</label><input id="project-name" value={projectName} onChange={e => setProjectName(e.target.value)} required maxLength={255} placeholder="e.g. Payments platform" /><button className="button button-primary" disabled={busy}><Plus size={15} /> Create project</button></form></section>
-      <section className="panel setup-panel"><div className="panel-heading"><div><span className="eyebrow">STEP 02</span><h2>{repositoryEdit ? 'Edit repository' : 'Link a repository'}</h2></div><span className="setup-step"><GitPullRequest size={17} /></span></div><p className="panel-description">Link the GitHub repository that emits PR webhooks. The secret reference is stored as a label; configure actual webhook verification separately.</p><form onSubmit={linkRepo} className="stack-form"><label htmlFor="project-select">Project</label><select id="project-select" value={activeProject?.id || ''} onChange={e => setActiveProject(projects.find(p => String(p.id) === e.target.value) || null)} required><option value="" disabled>Select a project</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select><label htmlFor="repo-name">GitHub repository</label><input id="repo-name" value={repoName} onChange={e => setRepoName(e.target.value)} required placeholder="owner/repository" /><label htmlFor="secret-ref">Webhook secret reference</label><input id="secret-ref" value={secretRef} onChange={e => setSecretRef(e.target.value)} required placeholder="e.g. GITHUB_WEBHOOK_SECRET" /><div className="form-actions"><button className="button button-primary" disabled={busy || !activeProject}>{repositoryEdit ? <><Check size={15} /> Save repository</> : <><Plus size={15} /> Link repository</>}</button>{repositoryEdit && <button type="button" className="button button-secondary" onClick={() => { setRepositoryEdit(null); setRepoName(''); setSecretRef('') }}>Cancel</button>}</div></form></section></div>
-    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">CONNECTED SOURCES</span><h2>Repositories <span className="count-bubble">{repositories.length}</span></h2></div></div>
-      {loading ? <LoadingRows /> : repositories.length ? <div className="repo-list">{repositories.map(repo => <article className="repo-row" key={repo.id}><span className="repo-icon"><FolderGit2 size={17} /></span><div className="repo-main"><strong>{repo.githubRepoFullName}</strong><small>Linked {formatDate(repo.installedAt)}</small></div><span className="repo-project">{projects.find(p => p.id === repo.projectId)?.name || 'Project'}</span><span className="repo-status"><span className="status-dot" /> Connected</span><div className="row-actions"><button className="icon-button" disabled={busy} aria-label={`Edit ${repo.githubRepoFullName}`} title="Edit repository" onClick={() => { setRepositoryEdit(repo.id); setRepoName(repo.githubRepoFullName); setSecretRef(repo.webhookSecretRef); setFormError('') }}><Pencil size={14} /></button><button className="icon-button destructive-action" disabled={busy} aria-label={`Delete ${repo.githubRepoFullName}`} title="Delete repository" onClick={() => deleteRepository(repo)}><Trash2 size={14} /></button></div></article>)}</div> : <EmptyState title="No repositories linked" detail="Create or select a project, then link its GitHub repository to start registering endpoint source mappings." />}
+    <div className="inline-help"><Info size={13} /><span>Projects keep endpoint inventory and linked repositories grouped by service area. A repository needs a project before it can emit webhook-driven risk context.</span><span className="info-tip" tabIndex="0" aria-label="Repository guidance" data-tip="Use a project to group repos by service area. Link repositories to the project that owns the affected endpoint inventory."><CircleHelp size={12} /></span></div>
+    <div className="setup-grid"><section className="panel setup-panel"><div className="panel-heading"><div><span className="eyebrow">STEP 01</span><h2>Create a project</h2></div><span className="setup-step"><FolderGit2 size={17} /></span></div><p className="panel-description">A project groups the repositories and endpoints that belong to one product area or service boundary.</p><form onSubmit={createProject} className="stack-form"><label htmlFor="project-name">Project name</label><input id="project-name" value={projectName} onChange={e => setProjectName(e.target.value)} required maxLength={255} placeholder="e.g. Payments platform" /><button className="button button-primary" disabled={busy}><Plus size={15} /> Create project</button></form></section>
+      <section className="panel setup-panel"><div className="panel-heading"><div><span className="eyebrow">STEP 02</span><h2>{repositoryEdit ? 'Edit repository' : 'Link a repository'}</h2></div><span className="setup-step"><GitPullRequest size={17} /></span></div><p className="panel-description">Connect the GitHub source that emits pull request events. Keep the secret reference label aligned with your deployment setup.</p><form onSubmit={linkRepo} className="stack-form"><label htmlFor="project-select">Project</label><select id="project-select" value={activeProject?.id || ''} onChange={e => setActiveProject(projects.find(p => String(p.id) === e.target.value) || null)} required><option value="" disabled>Select a project</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select><label htmlFor="repo-name">GitHub repository</label><input id="repo-name" value={repoName} onChange={e => setRepoName(e.target.value)} required placeholder="owner/repository" /><label htmlFor="secret-ref">Webhook secret reference</label><input id="secret-ref" value={secretRef} onChange={e => setSecretRef(e.target.value)} required placeholder="e.g. GITHUB_WEBHOOK_SECRET" /><div className="form-actions"><button className="button button-primary" disabled={busy || !activeProject}>{repositoryEdit ? <><Check size={15} /> Save repository</> : <><Plus size={15} /> Link repository</>}</button>{repositoryEdit && <button type="button" className="button button-secondary" onClick={() => { setRepositoryEdit(null); setRepoName(''); setSecretRef('') }}>Cancel</button>}</div></form></section></div>
+    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">CONNECTED SOURCES</span><h2>Repositories <span className="count-bubble">{repositories.length}</span></h2></div><span className="info-tip" tabIndex="0" aria-label="Repository status" data-tip="Each repository should map to a single project owner. Webhook events from that repo feed the pull request and risk history for that workspace."><CircleHelp size={13} /></span></div>
+      {loading ? <LoadingRows /> : repositories.length ? <div className="repo-list">{repositories.map(repo => <article className="repo-row" key={repo.id}><span className="repo-icon"><FolderGit2 size={17} /></span><div className="repo-main"><strong>{repo.githubRepoFullName}</strong><small>Linked {formatDate(repo.installedAt)}</small></div><span className="repo-project">{projects.find(p => p.id === repo.projectId)?.name || 'Project'}</span><span className="repo-status"><span className="status-dot" /> Connected</span><div className="row-actions"><button className="icon-button" disabled={busy} aria-label={`Edit ${repo.githubRepoFullName}`} title="Edit repository" onClick={() => { setRepositoryEdit(repo.id); setRepoName(repo.githubRepoFullName); setSecretRef(repo.webhookSecretRef); setFormError('') }}><Pencil size={14} /></button><button className="icon-button destructive-action" disabled={busy} aria-label={`Delete ${repo.githubRepoFullName}`} title="Delete repository" onClick={() => deleteRepository(repo)}><Trash2 size={14} /></button></div></article>)}</div> : <EmptyState title="No repositories linked" detail="Create or select a project, then connect a GitHub repository to begin mapping endpoint sources." />}
     </section>
   </>
 }
@@ -279,6 +347,7 @@ function EndpointsPage({ endpoints, projects, repositories, refresh, loading, er
   return <>
     <PageHeading eyebrow="PRODUCTION SURFACE" title="Endpoints" subtitle="Registered API routes mapped to their source files and current traffic evidence." action={<button className="button button-primary" onClick={() => setShowForm(!showForm)} disabled={!repositories.length}><Plus size={15} /> Register endpoint</button>} />
     {error && <ErrorState message={error} onRetry={refresh} />}
+    <div className="inline-help"><Info size={13} /><span>Endpoint criticality is separate from PR risk. It represents production impact, while pull request review risk is calculated from the code change and recent traffic.</span><span className="info-tip" tabIndex="0" aria-label="Endpoint guidance" data-tip="Criticality is a route-level business-impact label. PR risk is calculated separately from the change set and observed traffic."><CircleHelp size={12} /></span></div>
     {showForm && <section className="panel endpoint-form-panel"><div className="panel-heading"><div><span className="eyebrow">ENDPOINT CONFIGURATION</span><h2>{editingEndpointId ? 'Edit endpoint' : 'Map an API route'}</h2></div><button className="icon-button" onClick={() => { setShowForm(false); setEditingEndpointId(null) }} aria-label="Close form"><X size={17} /></button></div>{formError && <div className="inline-error" role="alert">{formError}</div>}<form className="endpoint-form" onSubmit={submit}><label>Repository<select value={repoId} onChange={e => setRepoId(e.target.value)} required>{repositories.map(repo => <option key={repo.id} value={repo.id}>{repo.githubRepoFullName}</option>)}</select></label><label>Method<select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })}>{['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(method => <option key={method}>{method}</option>)}</select></label><label>Path pattern<input value={form.pathPattern} onChange={e => setForm({ ...form, pathPattern: e.target.value })} required placeholder="/api/orders/{id}" /></label><label>Criticality <span className="info-tip" tabIndex="0" aria-label="Criticality meaning" data-tip="Business impact if this route is affected. It is separate from the calculated PR risk tier."><CircleHelp size={12} /></span><select value={form.criticality} onChange={e => setForm({ ...form, criticality: e.target.value })}>{['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(level => <option key={level}>{level}</option>)}</select></label><label className="form-wide">Source patterns <span className="form-hint">Patterns connect changed files to this endpoint. Suggestions can be edited or replaced.</span><div className="suggestion-list" aria-label="Suggested source patterns">{suggestions.map(pattern => <button type="button" className="suggestion-chip" key={pattern} onClick={() => setForm(current => ({ ...current, sourcePatterns: [...new Set([...current.sourcePatterns.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean), pattern])].join('\n') }))}>{pattern}<Plus size={12} /></button>)}</div><textarea rows="3" value={form.sourcePatterns} onChange={e => setForm({ ...form, sourcePatterns: e.target.value })} required placeholder="Enter one source glob per line" /></label><div className="form-wide form-footer"><span>Criticality describes business impact; source mappings determine which code changes affect the route.</span><div className="form-actions"><button className="button button-primary" disabled={saving}>{saving ? 'Saving…' : editingEndpointId ? 'Save endpoint' : 'Register endpoint'}</button>{editingEndpointId && <button type="button" className="button button-secondary" onClick={() => { setShowForm(false); setEditingEndpointId(null) }}>Cancel</button>}</div></div></form></section>}
     <div className="catalog-toolbar"><div className="segment-control" role="group" aria-label="Filter by criticality">{['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(level => <button key={level} className={filter === level ? 'segment-active' : ''} onClick={() => setFilter(level)}>{level === 'ALL' ? 'All' : level[0] + level.slice(1).toLowerCase()}</button>)}</div><label className="search-box"><Search size={14} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search endpoint or source" aria-label="Search endpoints" /></label></div>
     {formError && !showForm && <div className="inline-error" role="alert">{formError}</div>}
@@ -383,7 +452,7 @@ function PullRequestsPage({ activeProject, refresh, loading, error }) {
     setListLoading(true)
     setListError('')
     try {
-      const data = await api.pullRequests(activeProject.id, requestedPage, 25, requestedStatus)
+      const data = await api.pullRequests(activeProject.id, requestedPage, 20, requestedStatus)
       setRows(data?.content || [])
       setPageInfo(data || { totalElements: 0, totalPages: 0, hasNext: false, hasPrevious: false })
       setPage(data?.page || 0)
@@ -400,12 +469,20 @@ function PullRequestsPage({ activeProject, refresh, loading, error }) {
     return <EmptyState title="No project selected" detail="Choose a project to begin reviewing the pull requests associated with it." />
   }
 
+  const statusSummary = rows.reduce((acc, pr) => {
+    const status = (pr.status || 'OPEN').toUpperCase()
+    acc[status] = (acc[status] || 0) + 1
+    return acc
+  }, {})
+
+  const navigate = useNavigate()
+
   return <>
     <PageHeading eyebrow="CODE REVIEW" title="Pull requests" subtitle="Recent PR signals, changed files, and the latest risk context for the selected workspace." action={<button className="button button-secondary" onClick={() => loadPullRequests()}><RefreshCw size={14} /> Refresh</button>} />
     {error && <ErrorState message={error} onRetry={refresh} />}
     {listError && <ErrorState message={listError} onRetry={() => loadPullRequests()} />}
     <div className="catalog-toolbar pr-toolbar"><label className="filter-field">Status<select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">All statuses</option><option value="OPEN">Open</option><option value="MERGED">Merged</option><option value="CLOSED">Closed</option></select></label><span className="muted-cell">{formatNumber(pageInfo.totalElements)} pull requests</span></div>
-    {listLoading ? <section className="panel"><LoadingRows count={4} /></section> : rows.length ? <section className="panel"><div className="table-scroll"><table><thead><tr><th>PR</th><th>Repository</th><th>Status</th><th>Files</th><th>Affected endpoints</th><th>Latest risk</th></tr></thead><tbody>{rows.map(pr => <tr key={pr.id}><td><Link to={`/pull-requests/${pr.id}`} className="endpoint-name"><span className="repo-icon"><GitPullRequest size={14} /></span><div><strong>#{pr.githubPrNumber}</strong><small>{pr.title}</small></div></Link></td><td className="muted-cell">{pr.repositoryName}</td><td><span className={`risk-badge risk-${(pr.status || 'open').toLowerCase()}`}>{pr.status || 'OPEN'}</span></td><td>{pr.changedFileCount}</td><td>{pr.affectedEndpointCount}</td><td>{pr.latestRiskTier ? <RiskBadge tier={pr.latestRiskTier} /> : <span className="muted-cell">Unassessed</span>}</td></tr>)}</tbody></table></div><div className="pagination-footer"><span>Page {pageInfo.totalPages ? page + 1 : 0} of {pageInfo.totalPages}</span><div className="form-actions"><button className="button button-secondary button-small" disabled={listLoading || !pageInfo.hasPrevious} onClick={() => loadPullRequests(page - 1)}>Previous</button><button className="button button-secondary button-small" disabled={listLoading || !pageInfo.hasNext} onClick={() => loadPullRequests(page + 1)}>Next</button></div></div></section> : <EmptyState title={statusFilter ? 'No matching pull requests' : 'No pull requests yet'} detail="Pull requests appear after GitHub webhook delivery. Status filters apply across the selected project." />}
+    {listLoading ? <section className="panel"><LoadingRows count={4} /></section> : rows.length ? <section className="panel"><div className="table-scroll"><table><thead><tr><th>PR</th><th>Repository</th><th>Status</th><th>Files</th><th>Affected endpoints</th><th>Latest risk</th></tr></thead><tbody>{rows.map(pr => <tr key={pr.id} className="clickable-row" tabIndex={0} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/pull-requests/${pr.id}`) } }} onClick={() => navigate(`/pull-requests/${pr.id}`)}><td><Link to={`/pull-requests/${pr.id}`} className="endpoint-name" onClick={event => event.stopPropagation()}><span className="repo-icon"><GitPullRequest size={14} /></span><div><strong>#{pr.githubPrNumber}</strong><small>{pr.title}</small></div></Link></td><td className="muted-cell">{pr.repositoryName}</td><td><span className={`risk-badge risk-${(pr.status || 'open').toLowerCase()}`}>{pr.status || 'OPEN'}</span></td><td>{pr.changedFileCount}</td><td>{pr.affectedEndpointCount}</td><td>{pr.latestRiskTier ? <RiskBadge tier={pr.latestRiskTier} /> : <span className="muted-cell">Unassessed</span>}</td></tr>)}</tbody></table></div><div className="pagination-footer"><span>Page {pageInfo.totalPages ? page + 1 : 0} of {pageInfo.totalPages}</span><div className="form-actions"><button className="button button-secondary button-small" disabled={listLoading || !pageInfo.hasPrevious} onClick={() => loadPullRequests(page - 1)}>Previous</button><button className="button button-secondary button-small" disabled={listLoading || !pageInfo.hasNext} onClick={() => loadPullRequests(page + 1)}>Next</button></div></div></section> : <EmptyState title={statusFilter ? 'No matching pull requests' : 'No pull requests yet'} detail="Pull requests appear after GitHub webhook delivery. Status filters apply across the selected project." />}
   </>
 }
 
@@ -833,10 +910,14 @@ function PullRequestDetailPage({ activeProject }) {
   if (error) return <ErrorState message={error} onRetry={() => setRefreshKey(value => value + 1)} />
   if (!detail) return <EmptyState title="Pull request not found" detail="This pull request may not belong to the current workspace or may have been removed." action={<Link className="text-link" to="/pull-requests">Return to pull requests</Link>} />
 
+  const deterministicRiskTier = detail.riskHistory?.[0]?.tier || 'INSUFFICIENT_DATA'
+  const latestRiskTier = deterministicRiskTier
+  const latestRiskScore = detail.riskHistory?.[0]?.score ?? null
+
   return <>
     <button className="back-link" onClick={() => window.history.back()}><ArrowLeft size={14} /> Back to pull requests</button>
-    <PageHeading eyebrow={`${detail.repositoryName} · #${detail.githubPrNumber}`} title={detail.title} subtitle={`${detail.author} · ${detail.status}`} action={detail.riskHistory?.[0] ? <RiskBadge tier={detail.riskHistory[0].tier} /> : <span className="muted-cell">No risk score yet</span>} />
-    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">DETAILS</span><h2>Review context</h2></div></div><div className="endpoint-kpis"><MetricTile label="Changed files" value={detail.changedFiles?.length || 0} note="Stored by the webhook" icon={Code2} /><MetricTile label="Affected endpoints" value={detail.affectedEndpoints?.length || 0} note="Matched from source patterns" icon={Layers3} /><MetricTile label="Latest tier" value={detail.riskHistory?.[0]?.tier || '—'} note={detail.riskHistory?.[0] ? `Scored ${Number(detail.riskHistory[0].score).toFixed(2)}` : 'No evaluation yet'} icon={Shield} /></div></section>
+    <PageHeading eyebrow={`${detail.repositoryName} · #${detail.githubPrNumber}`} title={detail.title} subtitle={`${detail.author} · ${detail.status}`} action={detail.riskHistory?.[0] || detail.review ? <div className="inline-risk-summary"><span className="muted-cell">Latest Risk</span><RiskBadge tier={latestRiskTier} /></div> : <span className="muted-cell">No risk score yet</span>} />
+    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">DETAILS</span><h2>Review context</h2></div></div><div className="endpoint-kpis"><MetricTile label="Changed files" value={detail.changedFiles?.length || 0} note="Stored by the webhook" icon={Code2} /><MetricTile label="Affected endpoints" value={detail.affectedEndpoints?.length || 0} note="Matched from source patterns" icon={Layers3} /><MetricTile label="Latest tier" value={latestRiskTier} note={latestRiskScore != null ? `Scored ${Number(latestRiskScore).toFixed(2)}` : 'No evaluation yet'} icon={Shield} /></div></section>
     <div className="dashboard-grid">
       <section className="panel"><div className="panel-heading"><div><span className="eyebrow">FILES</span><h2>Changed files</h2></div></div>{detail.changedFiles?.length ? <div className="changed-file-list">{detail.changedFiles.map(file => <article className="changed-file-row" key={file.id}><div className="changed-file-heading"><code>{file.filePath}</code><span className="diff-stats"><span>+{file.additions}</span><span>−{file.deletions}</span></span></div><details className="diff-disclosure"><summary>View patch</summary><pre>{file.patch || 'Patch unavailable for this file.'}</pre></details></article>)}</div> : <EmptyState title="No files recorded" detail="This PR has no changed-file payload attached." />}</section>
       <section className="panel"><div className="panel-heading"><div><span className="eyebrow">MAPPED</span><h2>Affected endpoints</h2></div></div>{detail.affectedEndpoints?.length ? <div className="table-scroll"><table><thead><tr><th>Method</th><th>Path</th><th>Criticality</th></tr></thead><tbody>{detail.affectedEndpoints.map(endpoint => <tr key={endpoint.endpointId}><td><span className={`method method-${(endpoint.method || 'get').toLowerCase()}`}>{endpoint.method || 'GET'}</span></td><td className="muted-cell"><code>{endpoint.pathPattern}</code></td><td><CriticalityPill value={endpoint.criticality} /></td></tr>)}</tbody></table></div> : <EmptyState title="No affected endpoints" detail="No endpoint mappings are linked to this PR yet." />}</section>
@@ -861,8 +942,15 @@ function MonitoringPage({ activeProject }) {
 
   useEffect(() => { load() }, [activeProject?.id])
   if (!activeProject) return <EmptyState title="No project selected" detail="Choose a project to inspect post-merge monitoring." />
+
+  const improvedCount = records.filter(record => record.verdict === 'IMPROVED').length
+  const degradedCount = records.filter(record => record.verdict === 'DEGRADED').length
+  const pendingCount = records.filter(record => record.verdict === 'PENDING').length
+  const avgObservedLatency = records.length ? records.reduce((sum, record) => sum + (record.observedLatencyMs || 0), 0) / records.length : 0
+
   return <>
-    <PageHeading eyebrow="POST-MERGE SIGNALS" title="Monitoring" subtitle="Traffic is compared with the pre-merge baseline after each observation window closes." action={<button className="button button-secondary" onClick={load}><RefreshCw size={14} /> Refresh</button>} />
+    <PageHeading eyebrow="POST-MERGE SIGNALS" title="Monitoring" subtitle="Track how merged pull requests impact route health over time and compare the post-merge window against the prior baseline." action={<button className="button button-secondary" onClick={load}><RefreshCw size={14} /> Refresh</button>} />
+    <div className="inline-help"><Info size={13} /><span>Monitoring compares the observed post-merge window against the prior baseline for the same route and repository.</span><span className="info-tip" tabIndex="0" aria-label="Monitoring guidance" data-tip="A monitor verdict is based on the short post-merge window compared to the preceding baseline traffic and error profile."><CircleHelp size={12} /></span></div>
     {error && <ErrorState message={error} onRetry={load} />}
     {loading ? <section className="panel"><LoadingRows count={4} /></section> : records.length ? <section className="panel"><div className="table-scroll"><table><thead><tr><th>Pull request</th><th>Endpoint</th><th>Window</th><th>Requests</th><th>5xx rate</th><th>Latency</th><th>Verdict</th></tr></thead><tbody>{records.map(record => <tr key={record.id}><td><Link className="text-link" to={`/pull-requests/${record.pullRequestId}`}>{record.repositoryName} #{record.githubPrNumber}</Link></td><td><span className={`method method-${(record.endpointMethod || 'get').toLowerCase()}`}>{record.endpointMethod || 'GET'}</span> <code>{record.endpointPath}</code></td><td className="monitoring-window">{formatDate(record.windowStart)}<small>to {formatDate(record.windowEnd)}</small></td><td>{formatNumber(record.baselineRequestCount)} / {formatNumber(record.observedRequestCount)}</td><td>{record.baselineErrorRate == null ? '—' : `${(record.baselineErrorRate * 100).toFixed(2)}%`} / {record.observedErrorRate == null ? '—' : `${(record.observedErrorRate * 100).toFixed(2)}%`}</td><td>{record.baselineLatencyMs == null ? '—' : `${record.baselineLatencyMs.toFixed(0)} ms`} / {record.observedLatencyMs == null ? '—' : `${record.observedLatencyMs.toFixed(0)} ms`}</td><td><span className={`monitoring-verdict verdict-${record.verdict.toLowerCase()}`}>{record.verdict}</span></td></tr>)}</tbody></table></div></section> : <EmptyState title="No merge windows yet" detail="A monitoring window begins when an affected pull request is merged. Verdicts appear after the configured observation period and sufficient traffic." />}
   </>
@@ -872,6 +960,8 @@ function AuditLogsPage() {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(0)
+  const pageSize = 20
 
   async function load() {
     setLoading(true); setError('')
@@ -881,10 +971,25 @@ function AuditLogsPage() {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(records.length / pageSize) - 1)
+    if (page > maxPage) setPage(maxPage)
+  }, [records.length, page])
+
+  const recentCount = records.filter(record => {
+    if (!record.createdAt) return false
+    const diffMs = Date.now() - new Date(record.createdAt).getTime()
+    return diffMs <= 1000 * 60 * 60 * 24
+  }).length
+  const uniqueActions = new Set(records.map(record => record.action)).size
+  const totalPages = Math.max(1, Math.ceil(records.length / pageSize))
+  const pageRecords = records.slice(page * pageSize, page * pageSize + pageSize)
+
   return <>
-    <PageHeading eyebrow="ACCOUNT ACTIVITY" title="Audit logs" subtitle="Recent events recorded for your account." action={<button className="button button-secondary" onClick={load}><RefreshCw size={14} /> Refresh</button>} />
+    <PageHeading eyebrow="ACCOUNT ACTIVITY" title="Audit logs" subtitle="Review recent account and platform events to understand who changed what and when." action={<button className="button button-secondary" onClick={load}><RefreshCw size={14} /> Refresh</button>} />
+    <div className="inline-help"><Info size={13} /><span>Recent activity captures the platform actions that shape endpoint ownership, repository state, and review decisions.</span><span className="info-tip" tabIndex="0" aria-label="Audit guidance" data-tip="An audit trail is retained for the most recent workspace actions, including repository changes, review events, and monitoring outcomes."><CircleHelp size={12} /></span></div>
     {error && <ErrorState message={error} onRetry={load} />}
-    {loading ? <section className="panel"><LoadingRows count={4} /></section> : records.length ? <section className="panel"><div className="table-scroll"><table><thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>{records.map(record => <tr key={record.id}><td className="muted-cell">{formatDate(record.createdAt)}</td><td>{record.action.replaceAll('_', ' ')}</td><td>{record.entityType} {record.entityId}</td><td className="audit-details">{Object.entries(record.details || {}).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${value}`).join(' · ') || '—'}</td></tr>)}</tbody></table></div></section> : <EmptyState title="No activity recorded" detail="Risk assessments, password changes, and monitoring verdicts will appear here." />}
+    {loading ? <section className="panel"><LoadingRows count={4} /></section> : records.length ? <section className="panel"><div className="table-scroll"><table><thead><tr><th>When</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead><tbody>{pageRecords.map(record => <tr key={record.id}><td className="muted-cell">{formatDate(record.createdAt)}</td><td><span className="audit-action-pill">{record.action.replaceAll('_', ' ')}</span></td><td>{record.entityType} {record.entityId}</td><td className="audit-details">{Object.entries(record.details || {}).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${value}`).join(' · ') || '—'}</td></tr>)}</tbody></table></div><div className="pagination-footer"><span>Page {records.length ? page + 1 : 0} of {records.length ? totalPages : 0}</span><div className="form-actions"><button className="button button-secondary button-small" disabled={loading || page === 0} onClick={() => setPage(current => Math.max(0, current - 1))}>Previous</button><button className="button button-secondary button-small" disabled={loading || page >= totalPages - 1} onClick={() => setPage(current => current + 1)}>Next</button></div></div></section> : <EmptyState title="No activity recorded" detail="Risk assessments, password changes, and monitoring verdicts will appear here." />}
   </>
 }
 
@@ -922,9 +1027,39 @@ function ProfilePage() {
   }
 
   return <>
-    <PageHeading eyebrow="ACCOUNT" title="Profile & security" subtitle="Review your account and update its password." />
+    <PageHeading eyebrow="ACCOUNT & SECURITY" title="Profile" subtitle="Review account details and keep your workspace credentials aligned with your current access policy." />
     {error && <div className="inline-error" role="alert">{error}</div>}{notice && <div className="inline-success"><Check size={15} />{notice}</div>}
-    {loading ? <section className="panel"><LoadingRows count={2} /></section> : profile && <div className="profile-grid"><section className="panel profile-panel"><span className="eyebrow">PROFILE</span><div className="profile-field"><small>Email</small><strong>{profile.email}</strong></div><div className="profile-field"><small>Role</small><strong>{profile.role}</strong></div><div className="profile-field"><small>Member since</small><strong>{formatDate(profile.createdAt)}</strong></div></section><section className="panel profile-panel"><div className="panel-heading"><div><span className="eyebrow">CREDENTIALS</span><h2>Change password</h2></div><KeyRound size={17} /></div><form className="stack-form password-form" onSubmit={changePassword}><label htmlFor="current-password">Current password</label><input id="current-password" type="password" autoComplete="current-password" required value={form.currentPassword} onChange={e => setForm({ ...form, currentPassword: e.target.value })} /><label htmlFor="new-password">New password</label><input id="new-password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} /><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} /><button className="button button-primary" disabled={busy}>{busy ? 'Updating…' : 'Update password'}</button></form></section></div>}
+    {loading ? <section className="panel"><LoadingRows count={2} /></section> : profile && <>
+      <div className="profile-grid">
+        <section className="panel profile-panel">
+          <div className="panel-heading"><div><span className="eyebrow">PROFILE</span><h2>Account details</h2></div><ShieldCheck size={17} /></div>
+          <div className="profile-field"><small>Email</small><strong>{profile.email}</strong></div>
+          <div className="profile-field"><small>Role</small><strong>{profile.role}</strong></div>
+          <div className="profile-field"><small>Member since</small><strong>{formatDate(profile.createdAt)}</strong></div>
+          <div className="security-note"><div className="security-note-icon"><Check size={14} /></div><p>Use a unique password for this workspace and avoid reusing credentials from other services.</p></div>
+        </section>
+        <section className="panel profile-panel">
+          <div className="panel-heading"><div><span className="eyebrow">CREDENTIALS</span><h2>Change password</h2></div><KeyRound size={17} /></div>
+          <form className="stack-form password-form" onSubmit={changePassword}>
+            <label htmlFor="current-password">Current password</label>
+            <input id="current-password" type="password" autoComplete="current-password" required value={form.currentPassword} onChange={e => setForm({ ...form, currentPassword: e.target.value })} />
+            <label htmlFor="new-password">New password</label>
+            <input id="new-password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
+            <label htmlFor="confirm-password">Confirm new password</label>
+            <input id="confirm-password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} />
+            <div className="password-requirements">
+              <span>Password guidance</span>
+              <ul>
+                <li>Use at least 8 characters</li>
+                <li>Combine letters, numbers, and symbols</li>
+                <li>Avoid reusing a previous workspace password</li>
+              </ul>
+            </div>
+            <button className="button button-primary" disabled={busy}>{busy ? 'Updating…' : 'Update password'}</button>
+          </form>
+        </section>
+      </div>
+    </>}
   </>
 }
 
@@ -944,6 +1079,17 @@ function formatDate(value) {
 function formatTimeInIst(value) {
   const date = parseBackendDate(value)
   return date ? new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }).format(date) : ''
+}
+
+function formatDisplayName(value) {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+  const localPart = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed
+  return localPart
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
+    .trim()
 }
 
 export default function App() {
@@ -999,7 +1145,10 @@ export default function App() {
   function loginComplete() {
     const payload = getToken()?.split('.')[1]
     if (payload) {
-      try { setUser(JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).sub || '') } catch { setUser('') }
+      try {
+        const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+        setUser(formatDisplayName(decoded.sub || '') || decoded.sub || '')
+      } catch { setUser('') }
     }
     setAuthenticated(true); navigate('/', { replace: true })
   }
@@ -1008,7 +1157,7 @@ export default function App() {
 
   return <AppShell user={user} onLogout={logout} projects={projects} activeProject={activeProject} setActiveProject={project => project && reloadProject(project.id)} endpointCount={endpoints.length} apiStatus={apiStatus}>
     <Routes>
-      <Route path="/" element={<Dashboard projects={projects} repositories={repositories} endpoints={endpoints} refresh={() => reloadProject()} loading={loading} error={loadError} />} />
+      <Route path="/" element={<Dashboard projects={projects} repositories={repositories} endpoints={endpoints} refresh={() => reloadProject()} loading={loading} error={loadError} apiStatus={apiStatus} />} />
       <Route path="/projects" element={<ProjectsPage projects={projects} repositories={repositories} refresh={reloadProject} loading={loading} error={loadError} activeProject={activeProject} setActiveProject={project => project && reloadProject(project.id)} />} />
       <Route path="/pull-requests" element={<PullRequestsPage activeProject={activeProject} refresh={() => reloadProject()} loading={loading} error={loadError} />} />
       <Route path="/pull-requests/:pullRequestId" element={<PullRequestDetailPage activeProject={activeProject} />} />
