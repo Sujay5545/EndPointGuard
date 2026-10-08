@@ -516,7 +516,9 @@ function StructuredReviewSection({ review, reviewStatus, latestRisk }) {
 
   const analysis = review.analysis
   const aiRiskLevel = analysis?.overallRisk?.level || review.decision || 'LOW'
-  const aiScore = analysis?.overallRisk?.score != null ? analysis.overallRisk.score : review.score
+  const aiScore = review.fallback
+    ? null
+    : analysis?.overallRisk?.score != null ? analysis.overallRisk.score : review.score
   const confidence = analysis?.reviewConfidence != null
     ? analysis.reviewConfidence
     : analysis?.overallRisk?.confidence
@@ -574,7 +576,7 @@ function StructuredReviewSection({ review, reviewStatus, latestRisk }) {
             <div className="comparison-values">
               <RiskBadge tier={aiRiskLevel} />
               <span className="comparison-score">
-                {aiScore != null ? `${Number(aiScore).toFixed(1)} / 100` : '—'}
+                {aiScore != null ? `${Number(aiScore)} / 100` : '—'}
               </span>
             </div>
             <p className="comparison-note">
@@ -590,7 +592,7 @@ function StructuredReviewSection({ review, reviewStatus, latestRisk }) {
         <MetricTile
           label="AI advisory risk"
           value={aiRiskLevel}
-          note={aiScore != null ? `Advisory score ${Number(aiScore).toFixed(1)}/100` : 'Advisory level'}
+          note={aiScore != null ? `Advisory score ${Number(aiScore)}/100` : 'Advisory level'}
           icon={ShieldAlert}
           accent={aiRiskLevel === 'CRITICAL' ? 'amber' : 'green'}
           compact
@@ -913,11 +915,12 @@ function PullRequestDetailPage({ activeProject }) {
   const deterministicRiskTier = detail.riskHistory?.[0]?.tier || 'INSUFFICIENT_DATA'
   const latestRiskTier = deterministicRiskTier
   const latestRiskScore = detail.riskHistory?.[0]?.score ?? null
+  const finalPrRiskScore = detail.finalPrRiskScore ?? null
 
   return <>
     <button className="back-link" onClick={() => window.history.back()}><ArrowLeft size={14} /> Back to pull requests</button>
     <PageHeading eyebrow={`${detail.repositoryName} · #${detail.githubPrNumber}`} title={detail.title} subtitle={`${detail.author} · ${detail.status}`} action={detail.riskHistory?.[0] || detail.review ? <div className="inline-risk-summary"><span className="muted-cell">Latest Risk</span><RiskBadge tier={latestRiskTier} /></div> : <span className="muted-cell">No risk score yet</span>} />
-    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">DETAILS</span><h2>Review context</h2></div></div><div className="endpoint-kpis"><MetricTile label="Changed files" value={detail.changedFiles?.length || 0} note="Stored by the webhook" icon={Code2} /><MetricTile label="Affected endpoints" value={detail.affectedEndpoints?.length || 0} note="Matched from source patterns" icon={Layers3} /><MetricTile label="Latest tier" value={latestRiskTier} note={latestRiskScore != null ? `Scored ${Number(latestRiskScore).toFixed(2)}` : 'No evaluation yet'} icon={Shield} /></div></section>
+    <section className="panel"><div className="panel-heading"><div><span className="eyebrow">DETAILS</span><h2>Review context</h2></div></div><div className="endpoint-kpis"><MetricTile label="Changed files" value={detail.changedFiles?.length || 0} note="Stored by the webhook" icon={Code2} /><MetricTile label="Affected endpoints" value={detail.affectedEndpoints?.length || 0} note="Matched from source patterns" icon={Layers3} /><MetricTile label="Latest tier" value={latestRiskTier} note={latestRiskScore != null ? `Scored ${Number(latestRiskScore).toFixed(2)}` : 'No evaluation yet'} icon={Shield} /><MetricTile label="Final PR risk" value={finalPrRiskScore == null ? '—' : `${(finalPrRiskScore * 100).toFixed(1)}%`} note="AI-primary combined score" icon={Gauge} /></div></section>
     <div className="dashboard-grid">
       <section className="panel"><div className="panel-heading"><div><span className="eyebrow">FILES</span><h2>Changed files</h2></div></div>{detail.changedFiles?.length ? <div className="changed-file-list">{detail.changedFiles.map(file => <article className="changed-file-row" key={file.id}><div className="changed-file-heading"><code>{file.filePath}</code><span className="diff-stats"><span>+{file.additions}</span><span>−{file.deletions}</span></span></div><details className="diff-disclosure"><summary>View patch</summary><pre>{file.patch || 'Patch unavailable for this file.'}</pre></details></article>)}</div> : <EmptyState title="No files recorded" detail="This PR has no changed-file payload attached." />}</section>
       <section className="panel"><div className="panel-heading"><div><span className="eyebrow">MAPPED</span><h2>Affected endpoints</h2></div></div>{detail.affectedEndpoints?.length ? <div className="table-scroll"><table><thead><tr><th>Method</th><th>Path</th><th>Criticality</th></tr></thead><tbody>{detail.affectedEndpoints.map(endpoint => <tr key={endpoint.endpointId}><td><span className={`method method-${(endpoint.method || 'get').toLowerCase()}`}>{endpoint.method || 'GET'}</span></td><td className="muted-cell"><code>{endpoint.pathPattern}</code></td><td><CriticalityPill value={endpoint.criticality} /></td></tr>)}</tbody></table></div> : <EmptyState title="No affected endpoints" detail="No endpoint mappings are linked to this PR yet." />}</section>

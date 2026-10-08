@@ -192,6 +192,7 @@ describe('pull request detail structured LLM review UI', () => {
           dataQualityNotes: ['Baseline traffic active'],
         },
       ],
+      finalPrRiskScore: 0.8,
       reviewStatus: 'COMPLETED',
       review: structuredReview,
     })
@@ -210,6 +211,9 @@ describe('pull request detail structured LLM review UI', () => {
     expect(screen.getByText('ADVISORY CONTEXT')).toBeInTheDocument()
     expect(screen.getByText(/0.25 score/i)).toBeInTheDocument()
     expect(screen.getByText('Scored 0.25')).toBeInTheDocument()
+    expect(screen.getByText('Final PR risk')).toBeInTheDocument()
+    expect(screen.getByText('80.0%')).toBeInTheDocument()
+    expect(screen.getByText('96 / 100')).toBeInTheDocument()
 
     // 3. AI Risk & Confidence
     expect(screen.getByText('98%')).toBeInTheDocument() // Confidence
@@ -284,6 +288,7 @@ describe('pull request detail structured LLM review UI', () => {
     })
     expect(screen.getByText('Provider unavailable')).toBeInTheDocument()
     expect(screen.getAllByText(/deterministic fallback/i).length).toBeGreaterThan(0)
+    expect(screen.getByText('Advisory level')).toBeInTheDocument()
 
     cleanup()
     sessionStorage.clear()

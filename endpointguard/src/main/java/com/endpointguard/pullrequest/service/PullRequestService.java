@@ -13,6 +13,7 @@ import com.endpointguard.pullrequest.repository.PrChangedFileRepository;
 import com.endpointguard.pullrequest.repository.PullRequestRepository;
 import com.endpointguard.risk.domain.RiskAssessment;
 import com.endpointguard.risk.repository.RiskAssessmentRepository;
+import com.endpointguard.risk.service.FinalPrRiskCalculator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -67,6 +68,16 @@ public class PullRequestService {
         List<PrAffectedEndpoint> affectedEndpoints = prAffectedEndpointRepository.findByPullRequestOrderByEndpointAsc(pullRequest);
         List<RiskAssessment> riskAssessments = riskAssessmentRepository.findByPullRequestIdOrderByComputedAtDesc(pullRequestId);
 
+        com.endpointguard.review.dto.ReviewDecision review = parseReview(pullRequest.getReviewResult());
+        Double operationalRisk = riskAssessments.isEmpty() ? null : riskAssessments.get(0).getScore();
+        Double aiScore = review == null || review.fallback()
+            ? null
+            : review.analysis() != null && review.analysis().overallRisk() != null
+                ? review.analysis().overallRisk().score()
+                : review.score();
+        Double aiAdvisoryRisk = aiScore == null ? null : aiScore / 100.0;
+        Double finalPrRiskScore = FinalPrRiskCalculator.calculate(aiAdvisoryRisk, operationalRisk);
+
         return new PullRequestResponse.Detail(
                 pullRequest.getId(),
                 pullRequest.getRepository().getProject().getId(),
@@ -84,7 +95,8 @@ public class PullRequestService {
                 affectedEndpoints.stream().map(this::toAffectedEndpoint).toList(),
                 riskAssessments.stream().map(this::toRiskHistoryEntry).toList(),
                 pullRequest.getReviewStatus(),
-                parseReview(pullRequest.getReviewResult())
+                review,
+                finalPrRiskScore
         );
     }
 

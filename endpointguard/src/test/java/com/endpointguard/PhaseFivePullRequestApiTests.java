@@ -165,6 +165,20 @@ class PhaseFivePullRequestApiTests extends RollbackIntegrationTest {
                 .computedAt(UtcDateTime.now())
                 .factorBreakdown(objectMapper.createObjectNode().put("TRAFFIC_VOLUME", 0.4).put("ERROR_RATE_TREND", 0.3))
                 .build());
+                                pullRequest.setReviewResult("""
+                                                                {
+                                                                        "decision": "HIGH",
+                                                                        "score": 0.0,
+                                                                        "summary": "Structured AI score must remain authoritative.",
+                                                                        "findings": [],
+                                                                        "provider": "groq",
+                                                                        "fallback": false,
+                                                                        "analysis": {
+                                                                                "overallRisk": {"level": "HIGH", "score": 80.0, "confidence": 0.9, "reason": "Test"}
+                                                                        }
+                                                                }
+                                                                """);
+                                pullRequestRepository.save(pullRequest);
 
         mockMvc.perform(get("/api/projects/{projectId}/pull-requests", projectId)
                         .header("Authorization", "Bearer " + token))
@@ -195,6 +209,9 @@ class PhaseFivePullRequestApiTests extends RollbackIntegrationTest {
                 .andExpect(jsonPath("$.changedFiles[0].filePath").value("src/main/java/com/acme/CheckoutController.java"))
                 .andExpect(jsonPath("$.changedFiles[0].patch").value(org.hamcrest.Matchers.containsString("new route")))
                 .andExpect(jsonPath("$.affectedEndpoints[0].pathPattern").value("/api/checkout"))
-                .andExpect(jsonPath("$.riskHistory[0].tier").value("HIGH"));
+                .andExpect(jsonPath("$.riskHistory[0].tier").value("HIGH"))
+                .andExpect(jsonPath("$.riskHistory[0].score").value(0.84))
+                .andExpect(jsonPath("$.review.analysis.overallRisk.score").value(80.0))
+                .andExpect(jsonPath("$.finalPrRiskScore").value(0.808));
     }
 }

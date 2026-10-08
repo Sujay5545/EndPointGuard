@@ -99,7 +99,6 @@ public record GroqReviewOutput(
             String whatChanged,
             String whatItDoes,
             String businessImpact,
-            RiskLevel riskLevel,
             List<RiskCategory> riskCategories,
             String technicalImpact,
             List<String> evidence,

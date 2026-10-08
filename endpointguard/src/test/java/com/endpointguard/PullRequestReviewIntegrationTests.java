@@ -63,7 +63,6 @@ class PullRequestReviewIntegrationTests {
                                     "src/main/java/OrderController.java", "Updates the order response",
                                     "Changes the response payload", "Returns order data to API clients",
                                     "Clients may depend on the existing response shape",
-                                    GroqReviewOutput.RiskLevel.MEDIUM,
                                     List.of(GroqReviewOutput.RiskCategory.BUSINESS_LOGIC_CHANGE),
                                     "The response contract may change",
                                     List.of("Patch changes the order response field."),

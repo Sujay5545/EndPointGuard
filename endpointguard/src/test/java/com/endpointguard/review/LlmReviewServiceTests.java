@@ -63,7 +63,7 @@ class LlmReviewServiceTests {
             "Remove return before JSX",
             List.of(new GroqReviewOutput.FileAnalysis(
                 "src/Components/Github.jsx", "Removed the return keyword", "`return (` becomes `(`",
-                "Component returns JSX", "The page may fail to render", GroqReviewOutput.RiskLevel.CRITICAL,
+                "Component returns JSX", "The page may fail to render",
                 List.of(GroqReviewOutput.RiskCategory.BUILD_BREAKING),
                 "The JSX expression may not be returned", List.of("Diff removes `return (`."),
                 List.of(), 0.98)),

@@ -45,6 +45,39 @@ import static org.mockito.Mockito.when;
 class GroqLlmReviewProviderTests {
 
     @Test
+    void groqResponseWithoutPerFileRiskLevelIsAccepted() {
+        GroqReviewOutput output = new GroqReviewOutput(
+                "Review with no file-level riskLevel field.",
+                new GroqReviewOutput.OverallRisk(GroqReviewOutput.RiskLevel.MEDIUM, 62.0, 0.85, "Operationally moderate risk."),
+                "The schema is valid without per-file riskLevel.",
+                List.of(
+                        new GroqReviewOutput.FileAnalysis(
+                                "src/PaymentController.java",
+                                "Validates payment input before processing.",
+                                "Adds input validation.",
+                                "Ensures invalid requests are rejected.",
+                                "Protects payment processing.",
+                                List.of(GroqReviewOutput.RiskCategory.BUSINESS_LOGIC_CHANGE),
+                                "Input validation is added to the controller.",
+                                List.of("The diff adds required validation."),
+                                List.of(),
+                                0.9)),
+                List.of(),
+                List.of(),
+                new GroqReviewOutput.BusinessImpact(
+                        "The payment flow remains operationally stable.", "Payment processing", 0.8),
+                "Proceed with review.",
+                0.9,
+                new GroqReviewOutput.RiskAlignment(
+                        "MEDIUM", "MEDIUM", GroqReviewOutput.RiskAlignment.Alignment.ALIGNED,
+                        "The advisory and operational risk levels agree."));
+
+        assertThat(GroqLlmReviewProvider.isValid(output)).isTrue();
+        assertThat((List<String>) GroqLlmReviewProvider.validationDiagnostics(output).get("failedPredicates"))
+                .doesNotContain("files[0].riskLevelValid");
+    }
+
+    @Test
     void mapsStructuredReviewResponseToCompatibleDecisionAndRetainsAnalysis() {
         GroqReviewOutput output = analysis(
                 GroqReviewOutput.RiskLevel.MEDIUM,
@@ -54,7 +87,6 @@ class GroqLlmReviewProviderTests {
                 List.of(new GroqReviewOutput.FileAnalysis(
                         "src/PaymentController.java", "Tightens payment validation", "Adds a guard",
                         "Rejects invalid payment data", "Protects the payment workflow",
-                        GroqReviewOutput.RiskLevel.MEDIUM,
                         List.of(GroqReviewOutput.RiskCategory.BUSINESS_LOGIC_CHANGE),
                         "Invalid input is rejected", List.of("The diff adds the validation guard."),
                         List.of(new GroqReviewOutput.EndpointImpact(
@@ -80,6 +112,26 @@ class GroqLlmReviewProviderTests {
         assertThat(request().computedRiskScore()).isEqualTo(64.0);
         verify(fixture.requestSpec()).advisors(any(Consumer.class));
     }
+
+        @ParameterizedTest
+        @org.junit.jupiter.params.provider.CsvSource({"0.72", "0.385"})
+        void preservesNonzeroStructuredAiRiskScores(double aiScore) {
+                GroqReviewOutput output = analysis(
+                                GroqReviewOutput.RiskLevel.LOW,
+                                aiScore,
+                                "Advisory score propagation check.",
+                                List.of(),
+                                List.of(new GroqReviewOutput.FileAnalysis(
+                                                "README.md", "Documentation update", "Clarifies usage", "Documents behavior",
+                                                "No direct runtime impact", List.of(GroqReviewOutput.RiskCategory.DOCUMENTATION_ONLY),
+                                                "Documentation only", List.of("README changed."), List.of(), 0.9)));
+
+                ReviewDecision decision = fixture(output).provider().review(request());
+
+                assertThat(decision.fallback()).isFalse();
+                assertThat(decision.score()).isEqualTo(aiScore);
+                assertThat(decision.analysis().overallRisk().score()).isEqualTo(aiScore);
+        }
 
     @Test
     void removedReturnStatementIsReportedAsPotentialBuildBreakingRisk() {
@@ -114,7 +166,7 @@ class GroqLlmReviewProviderTests {
                 List.of(new GroqReviewOutput.FileAnalysis(
                         "src/Components/Github.jsx", "Removes the component return keyword",
                         "`return (` becomes `(`", "The component loads data and returns JSX",
-                        "The Github page may fail to render for users", GroqReviewOutput.RiskLevel.CRITICAL,
+                        "The Github page may fail to render for users",
                         List.of(GroqReviewOutput.RiskCategory.BUILD_BREAKING,
                                 GroqReviewOutput.RiskCategory.RUNTIME_BREAKING),
                         "A JSX expression is left without an explicit component return",
@@ -142,7 +194,7 @@ class GroqLlmReviewProviderTests {
                         "BUILD_BREAKING", "DOCUMENTATION_ONLY", "FORMATTING_ONLY");
         assertThat(userPrompt.getValue())
                 .contains("src/Components/Github.jsx", "return (", "Affected endpoints",
-                        "Deterministic EndpointGuard risk score", "PR description/body:",
+                        "Operational Risk score (0-100)", "PR description/body:",
                         "preserve the component render", "Surrounding source context: unavailable",
                         "Build/test/lint evidence: unavailable",
                         "all risk-alignment fields on every response");
@@ -154,7 +206,7 @@ class GroqLlmReviewProviderTests {
                 GroqReviewOutput.RiskLevel.LOW, 12.0, "No material risk found.", List.of(),
                 List.of(new GroqReviewOutput.FileAnalysis(
                         "README.md", "Documentation update", "Clarifies setup", "Documents project usage",
-                        "No direct runtime impact", GroqReviewOutput.RiskLevel.LOW,
+                        "No direct runtime impact",
                         List.of(GroqReviewOutput.RiskCategory.DOCUMENTATION_ONLY), "Documentation only",
                         List.of("README line changed"), List.of(), 0.9))));
 
@@ -184,7 +236,6 @@ class GroqLlmReviewProviderTests {
                         "Changed code in a targeted way",
                         "Service implements application behavior",
                         "The change can affect service behavior or runtime safety",
-                        GroqReviewOutput.RiskLevel.MEDIUM,
                         expectedCategories,
                         "Evidence shows the exact diff and impact.",
                         List.of("Observed change: " + diff),
@@ -265,7 +316,7 @@ class GroqLlmReviewProviderTests {
                                 GroqReviewOutput.RiskLevel.LOW, 12.0, "Low-risk documentation change.", List.of(),
                                 List.of(new GroqReviewOutput.FileAnalysis(
                                                 "README.md", "Documentation update", "Clarifies setup", "Documents usage",
-                                                "No direct runtime impact", GroqReviewOutput.RiskLevel.LOW, mappedCategories,
+                                                "No direct runtime impact", mappedCategories,
                                                 "Documentation only", List.of("README section updated."), List.of(), 0.9)));
 
                 assertThat(mappedCategories).isEmpty();
@@ -436,7 +487,6 @@ class GroqLlmReviewProviderTests {
                                                                         "files": [
                                                                                 {
                                                                                         "file": "MODEL_FILE_SENTINEL",
-                                                                                        "riskLevel": "NOT_A_RISK_LEVEL",
                                                                                         "riskCategories": ["NOT_A_RISK_CATEGORY"],
                                                                                         "unexpectedPrivateNested": "HIDDEN_NESTED_SENTINEL"
                                                                                 }
@@ -553,7 +603,7 @@ class GroqLlmReviewProviderTests {
         List<GroqStructuredReviewOutput.FileAnalysis> files = output.files().stream()
                 .map(file -> new GroqStructuredReviewOutput.FileAnalysis(
                         file.file(), file.changeSummary(), file.whatChanged(), file.whatItDoes(),
-                        file.businessImpact(), file.riskLevel() == null ? null : file.riskLevel().name(),
+                        file.businessImpact(),
                         file.riskCategories().stream().map(category -> category == null ? null : category.name()).toList(),
                         file.technicalImpact(), file.evidence(), file.confidence()))
                 .toList();

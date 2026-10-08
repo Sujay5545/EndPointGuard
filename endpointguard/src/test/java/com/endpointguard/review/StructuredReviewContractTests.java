@@ -34,7 +34,6 @@ class StructuredReviewContractTests {
                         "Modified order processing logic",
                         "Processes orders and computes totals",
                         "Direct impact on order placement capability",
-                        GroqReviewOutput.RiskLevel.CRITICAL,
                         List.of(GroqReviewOutput.RiskCategory.BUSINESS_LOGIC_CHANGE, GroqReviewOutput.RiskCategory.RUNTIME_BREAKING),
                         "Throws exception on zero order items",
                         List.of("Added validation check in line 42"),
@@ -67,7 +66,7 @@ class StructuredReviewContractTests {
                 GroqReviewOutput.FileAnalysis original = valid.files().get(0);
                 GroqReviewOutput.FileAnalysis file = new GroqReviewOutput.FileAnalysis(
                                 original.file(), original.changeSummary(), original.whatChanged(), original.whatItDoes(),
-                                original.businessImpact(), original.riskLevel(), categories, original.technicalImpact(),
+                                original.businessImpact(), categories, original.technicalImpact(),
                                 original.evidence(), original.affectedEndpoints(), original.confidence());
                 return new GroqReviewOutput(valid.overallAssessment(), valid.overallRisk(), valid.changeSummary(),
                                 List.of(file), valid.criticalFindings(), valid.endpointImpact(), valid.businessImpact(),
@@ -124,7 +123,6 @@ class StructuredReviewContractTests {
                       "whatChanged": "Changed return",
                       "whatItDoes": "Renders UI",
                       "businessImpact": "UI rendering",
-                      "riskLevel": "high",
                       "riskCategories": ["build_breaking", "runtime_breaking"],
                       "technicalImpact": "May crash on load",
                       "evidence": ["Removed return"],
@@ -145,7 +143,6 @@ class StructuredReviewContractTests {
                 """;
         GroqReviewOutput parsed = objectMapper.readValue(json, GroqReviewOutput.class);
         assertThat(parsed.overallRisk().level()).isEqualTo(GroqReviewOutput.RiskLevel.CRITICAL);
-        assertThat(parsed.files().get(0).riskLevel()).isEqualTo(GroqReviewOutput.RiskLevel.HIGH);
         assertThat(parsed.files().get(0).riskCategories()).containsExactly(
                 GroqReviewOutput.RiskCategory.BUILD_BREAKING,
                 GroqReviewOutput.RiskCategory.RUNTIME_BREAKING
@@ -172,7 +169,6 @@ class StructuredReviewContractTests {
                       "whatChanged": "Changed return",
                       "whatItDoes": "Renders UI",
                       "businessImpact": "UI rendering",
-                      "riskLevel": "HIGH",
                       "riskCategories": ["BUILD_BREAKING"],
                       "technicalImpact": "May crash on load",
                       "evidence": ["Removed return"],
@@ -320,7 +316,6 @@ class StructuredReviewContractTests {
                       "whatChanged": "Text changed",
                       "whatItDoes": "Documents usage",
                       "businessImpact": "None",
-                      "riskLevel": "LOW",
                       "riskCategories": ["DOCUMENTATION_ONLY"],
                       "technicalImpact": "None",
                       "evidence": ["README edited"],
@@ -473,7 +468,6 @@ class StructuredReviewContractTests {
 
         GroqReviewOutput.FileAnalysis file = restoredAnalysis.files().get(0);
         assertThat(file.file()).isEqualTo("src/main/OrderService.java");
-        assertThat(file.riskLevel()).isEqualTo(GroqReviewOutput.RiskLevel.CRITICAL);
         assertThat(file.riskCategories()).contains(
                 GroqReviewOutput.RiskCategory.BUSINESS_LOGIC_CHANGE,
                 GroqReviewOutput.RiskCategory.RUNTIME_BREAKING

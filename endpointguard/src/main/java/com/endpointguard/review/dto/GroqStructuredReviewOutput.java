@@ -40,7 +40,6 @@ public record GroqStructuredReviewOutput(
             String whatChanged,
             String whatItDoes,
             String businessImpact,
-            String riskLevel,
             List<String> riskCategories,
             String technicalImpact,
             List<String> evidence,

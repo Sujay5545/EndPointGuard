@@ -62,6 +62,7 @@ public record PullRequestResponse(
             List<AffectedEndpoint> affectedEndpoints,
                         List<RiskHistoryEntry> riskHistory,
                         String reviewStatus,
-                        ReviewDecision review
+                                                ReviewDecision review,
+                                                Double finalPrRiskScore
     ) {}
 }

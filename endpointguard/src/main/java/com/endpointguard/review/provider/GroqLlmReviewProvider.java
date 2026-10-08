@@ -87,7 +87,7 @@ public class GroqLlmReviewProvider implements LlmReviewProvider {
 
                     Follow the flat schema exactly: provide overall-risk fields, business-impact fields, and risk-alignment fields at the top level. Keep endpointImpact as a flat top-level array; include sourceFile on each endpoint impact and use the matching files[].file path. Do not nest endpoint impacts inside file entries.
 
-                    Treat deterministic EndpointGuard risk as authoritative and separate. The LLM assessment is advisory and must not modify it. Always return a non-null riskAlignment object with deterministicRisk, llmRisk, alignment, and explanation, even when both assessments agree. Use exact existing EndpointGuard risk-level tokens for deterministicRisk and llmRisk: LOW, MEDIUM, HIGH, CRITICAL. Use exact alignment strings: ALIGNED or DIFFERENT. Do not emit phrases like HIGH RISK, medium risk, or any other wording. Set alignment to ALIGNED when the risk levels agree. Set it to DIFFERENT when the advisory risk is higher, lower, or otherwise differs, and explicitly explain the direction and reason. For ALIGNED, briefly explain the agreement. The structured result must match the requested schema and allowed enum values.
+                    Operational Risk is authoritative for EndpointGuard's production assessment. AI Advisory Risk is an independent advisory assessment of the code change. Do not overwrite, recalculate, or redefine Operational Risk. The LLM assessment is advisory and must not modify Operational Risk. Always return a non-null riskAlignment object with deterministicRisk, llmRisk, alignment, and explanation, even when both assessments agree. Use exact existing EndpointGuard risk-level tokens for deterministicRisk and llmRisk: LOW, MEDIUM, HIGH, CRITICAL. Use exact alignment strings: ALIGNED or DIFFERENT. Do not emit phrases like HIGH RISK, medium risk, or any other wording. Set alignment to ALIGNED when the risk levels agree. Set it to DIFFERENT when the advisory risk is higher, lower, or otherwise differs, and explicitly explain the direction and reason. For ALIGNED, briefly explain the agreement. The structured result must match the requested schema and allowed enum values.
                     """)
                 .user("""
                     Repository: %s
@@ -95,8 +95,8 @@ public class GroqLlmReviewProvider implements LlmReviewProvider {
                     PR description/body: %s
                     Changed files with path, line counts, and patch (JSON):
                     %s
-                    Affected endpoints and deterministic risk context: %s
-                    Deterministic EndpointGuard risk score (0-100): %s
+                    Affected endpoints and Operational Risk context: %s
+                    Operational Risk score (0-100): %s
                     Surrounding source context: unavailable; no repository checkout or source fetch was performed.
                     Build/test/lint evidence: unavailable; no results were supplied for this review.
 
@@ -683,8 +683,7 @@ public class GroqLlmReviewProvider implements LlmReviewProvider {
         List<GroqReviewOutput.FileAnalysis> files = output.files().stream()
             .map(file -> new GroqReviewOutput.FileAnalysis(
                 file.file(), file.changeSummary(), file.whatChanged(), file.whatItDoes(),
-                file.businessImpact(), GroqReviewOutput.RiskLevel.fromString(file.riskLevel()),
-                mapRiskCategories(file.riskCategories()),
+                file.businessImpact(), mapRiskCategories(file.riskCategories()),
                 file.technicalImpact(), file.evidence(),
                 endpointsByFile.getOrDefault(file.file(), List.of()), file.confidence()))
             .toList();
@@ -877,7 +876,6 @@ public class GroqLlmReviewProvider implements LlmReviewProvider {
             addTextPredicate(details, failedPredicates, prefix + "whatChanged", file.whatChanged(), 3000);
             addTextPredicate(details, failedPredicates, prefix + "whatItDoes", file.whatItDoes(), 3000);
             addTextPredicate(details, failedPredicates, prefix + "businessImpact", file.businessImpact(), 2000);
-            addPredicate(details, failedPredicates, prefix + "riskLevelValid", file.riskLevel() != null);
             List<GroqReviewOutput.RiskCategory> categories = file.riskCategories();
             details.put(prefix + "riskCategoriesCount", categories == null ? -1 : categories.size());
             addPredicate(details, failedPredicates, prefix + "riskCategoriesValid",
@@ -954,7 +952,6 @@ public class GroqLlmReviewProvider implements LlmReviewProvider {
                 && blankOrLong(file.whatChanged(), 3000) == false
                 && blankOrLong(file.whatItDoes(), 3000) == false
                 && blankOrLong(file.businessImpact(), 2000) == false
-                && file.riskLevel() != null
                 && file.riskCategories() != null
                 && !file.riskCategories().isEmpty()
                 && file.riskCategories().size() <= GroqReviewOutput.RiskCategory.values().length
