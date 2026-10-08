@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
-
+//No risk
     @PostMapping("/register")
     public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
         return new AuthResponse(authService.register(request.email(), request.password(), request.role()));
