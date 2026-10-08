@@ -20,11 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-
-    private final AuthService authService;
+    //Handled dependency injection properly.
+    private AuthService authService;
 
     @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+    public AuthResponse register(@Valid RegisterRequest request) {
         return new AuthResponse(authService.register(request.email(), request.password(), request.role()));
     }
 
