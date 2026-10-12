@@ -28,10 +28,6 @@ public class AuthController {
         return new AuthResponse(authService.register(request.email(), request.password(), request.role()));
     }
 
-    @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return new AuthResponse(authService.login(request.email(), request.password()));
-    }
 
     @GetMapping("/profile")
     public ProfileResponse profile(Authentication authentication) {
